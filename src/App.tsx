@@ -1,220 +1,429 @@
-import { useState } from "react";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { useToast } from "@/hooks/use-toast";
-import { Toaster } from "@/components/ui/toaster";
+import React, { useState, useEffect, useCallback } from 'react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import { cn } from '@/lib/utils';
+import { motion, AnimatePresence } from 'framer-motion';
+import {
+  Trophy,
+  ListChecks,
+  AlertTriangle,
+  Loader2,
+} from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
-interface Sauce {
-  id: number;
+interface Competitor {
+  id: string;
   name: string;
-  tags: string[];
-  ratings: number[];
-  newTag: string;
-  newRating: string;
-  error: string;
 }
 
-const initialSauces: Sauce[] = [
-  {
-    id: 1,
-    name: "Sriracha",
-    tags: ["Spicy", "Asian"],
-    ratings: [] as number[],
-    newTag: "",
-    newRating: "",
-    error: "",
-  },
-  {
-    id: 2,
-    name: "Tabasco",
-    tags: ["Vinegary", "Classic"],
-    ratings: [] as number[],
-    newTag: "",
-    newRating: "",
-    error: "",
-  },
-  {
-    id: 3,
-    name: "Frank's RedHot",
-    tags: ["Mild", "Buffalo"],
-    ratings: [] as number[],
-    newTag: "",
-    newRating: "",
-    error: "",
-  },
+interface Score {
+  competitorId: string;
+  creativity: number;
+  technique: number;
+  presentation: number;
+}
+
+const categories = [
+  { name: 'Creativity', key: 'creativity' },
+  { name: 'Technique', key: 'technique' },
+  { name: 'Presentation', key: 'presentation' },
 ];
 
 const App = () => {
-  const [sauces, setSauces] = useState<Sauce[]>(initialSauces);
-  const { toast } = useToast();
+  const [competitors, setCompetitors] = useState<Competitor[]>([]);
+  const [scores, setScores] = useState<Score[]>([]);
+  const [isAddCompetitorDialogOpen, setIsAddCompetitorDialogOpen] = useState(false);
+  const [newCompetitorName, setNewCompetitorName] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [currentCompetitorId, setCurrentCompetitorId] = useState('');
+  const [currentScores, setCurrentScores] = useState({
+    creativity: 0,
+    technique: 0,
+    presentation: 0,
+  });
 
-  const showNotification = (message: string, type: 'success' | 'error') => {
-    toast({
-      description: message,
-      variant: type === 'success' ? 'default' : 'destructive',
+  // Load data from localStorage on component mount
+  useEffect(() => {
+    const storedCompetitors = localStorage.getItem('danceBattleCompetitors');
+    const storedScores = localStorage.getItem('danceBattleScores');
+
+    if (storedCompetitors) setCompetitors(JSON.parse(storedCompetitors));
+    if (storedScores) setScores(JSON.parse(storedScores));
+  }, []);
+
+  // Save data to localStorage whenever competitors or scores change
+  useEffect(() => {
+    localStorage.setItem('danceBattleCompetitors', JSON.stringify(competitors));
+    localStorage.setItem('danceBattleScores', JSON.stringify(scores));
+  }, [competitors, scores]);
+
+  const handleAddCompetitor = useCallback(() => {
+    if (!newCompetitorName.trim()) return;
+    if (competitors.some((competitor) => competitor.name === newCompetitorName.trim())) {
+      setError('Competitor name already exists.');
+      return;
+    }
+
+    const newCompetitor: Competitor = {
+      id: crypto.randomUUID(),
+      name: newCompetitorName.trim(),
+    };
+    setCompetitors((prevCompetitors) => [...prevCompetitors, newCompetitor]);
+    setNewCompetitorName('');
+    setIsAddCompetitorDialogOpen(false);
+    setError(null);
+  }, [newCompetitorName, competitors]);
+
+  const handleRemoveCompetitor = useCallback((competitorId: string) => {
+    setCompetitors((prevCompetitors) =>
+        prevCompetitors.filter((competitor) => competitor.id !== competitorId)
+    );
+    setScores((prevScores) => prevScores.filter((score) => score.competitorId !== competitorId));
+  }, []);
+
+  const handleScoreChange = useCallback(
+      (category: string, value: number) => {
+        setCurrentScores((prevScores) => ({
+          ...prevScores,
+          [category]: value,
+        }));
+      },
+      []
+  );
+
+  const handleSubmitScore = useCallback(() => {
+    if (!currentCompetitorId) {
+      setError('Please select a competitor.');
+      return;
+    }
+
+    const newScore: Score = {
+      competitorId: currentCompetitorId,
+      creativity: currentScores.creativity,
+      technique: currentScores.technique,
+      presentation: currentScores.presentation,
+    };
+
+    setScores((prevScores) => {
+      const existingScoreIndex = prevScores.findIndex(
+          (score) => score.competitorId === newScore.competitorId
+      );
+
+      if (existingScoreIndex > -1) {
+        const updatedScores = [...prevScores];
+        updatedScores[existingScoreIndex] = newScore;
+        return updatedScores;
+      } else {
+        return [...prevScores, newScore];
+      }
     });
+
+    setCurrentScores({ creativity: 0, technique: 0, presentation: 0 });
+    setCurrentCompetitorId('');
+    setError(null);
+  }, [currentCompetitorId, currentScores]);
+
+  const getCompetitorScores = useCallback(
+      (competitorId: string) => {
+        return scores.filter((score) => score.competitorId === competitorId);
+      },
+      [scores]
+  );
+
+  const calculateTotalScore = useCallback(
+      (competitorId: string) => {
+        const competitorScores = getCompetitorScores(competitorId);
+        let total = 0;
+        competitorScores.forEach((score) => {
+          total += score.creativity + score.technique + score.presentation;
+        });
+        return total;
+      },
+      [getCompetitorScores]
+  );
+
+  const sortedCompetitors = React.useMemo(() => {
+    return [...competitors].sort((a, b) => {
+      const scoreA = calculateTotalScore(a.id);
+      const scoreB = calculateTotalScore(b.id);
+      return scoreB - scoreA;
+    });
+  }, [competitors, calculateTotalScore]);
+
+  const dialogVariants = {
+    hidden: { opacity: 0, scale: 0.95 },
+    visible: { opacity: 1, scale: 1, transition: { duration: 0.2 } },
+    exit: { opacity: 0, scale: 0.95, transition: { duration: 0.15 } },
   };
 
-  const handleRateSauce = (id: number) => {
-    setSauces((prevSauces) =>
-      prevSauces.map((sauce) => {
-        if (sauce.id === id) {
-          if (!sauce.newRating) {
-            return {
-              ...sauce,
-              error: "Please select a rating before submitting!",
-            };
-          }
-          showNotification("Rating submitted successfully!", "success");
-          return {
-            ...sauce,
-            ratings: [...sauce.ratings, parseInt(sauce.newRating)],
-            newRating: "",
-            error: "",
-          };
-        }
-        return sauce;
-      })
-    );
-  };
-
-  const handleAddTag = (id: number) => {
-    setSauces((prevSauces) =>
-      prevSauces.map((sauce) => {
-        if (sauce.id === id) {
-          if (!sauce.newTag.trim()) {
-            return { ...sauce, error: "Please enter a tag before adding!" };
-          }
-          showNotification("Tag added successfully!", "success");
-          return {
-            ...sauce,
-            tags: [...sauce.tags, sauce.newTag.trim()],
-            newTag: "",
-            error: "",
-          };
-        }
-        return sauce;
-      })
-    );
+  const listItemVariants = {
+    hidden: { opacity: 0, y: 10 },
+    visible: { opacity: 1, y: 0, transition: { duration: 0.2 } },
+    exit: { opacity: 0, y: -10, transition: { duration: 0.1 } },
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100 p-8">
-      <Toaster />
-      
-      <header className="text-center mb-12">
-        <h1 className="text-4xl md:text-5xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-purple-600">
-          Sauce Rating Platform
-        </h1>
-        <p className="text-gray-600 text-lg mt-2">
-          Rate and tag your favorite sauces!
-        </p>
-      </header>
+      <div className="min-h-screen bg-gradient-to-br from-gray-900 to-gray-800 p-4 sm:p-8">
+        <div className="max-w-4xl mx-auto space-y-6">
+          <div className="text-center space-y-2">
+            <h1 className="text-3xl sm:text-4xl md:text-5xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-500">
+              Dance Battle Scoreboard
+            </h1>
+            <p className="text-gray-300 text-sm sm:text-base">
+              Real-time scoring and leaderboard for your dance battles.
+            </p>
+          </div>
 
-      <div className="max-w-6xl mx-auto grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8 relative">
-        {sauces.map((sauce) => {
-          const avgRating = sauce.ratings.length > 0
-            ? (sauce.ratings.reduce((a, b) => a + b, 0) / sauce.ratings.length).toFixed(1)
-            : "Not rated yet";
-
-          return (
-            <Card key={sauce.id} className="border-none shadow-lg hover:shadow-xl transition-shadow">
-              <CardHeader className="pb-4">
-                <CardTitle className="text-2xl font-bold">{sauce.name}</CardTitle>
-                <div className="space-y-1">
-                  <p className="text-gray-600">
-                    Tags: {sauce.tags.map((tag, i) => (
-                      <span key={i} className="inline-block bg-blue-100 text-blue-700 rounded-full px-2 py-0.5 text-sm mr-1">
-                        {tag}
-                      </span>
+          {/* Competitors Section */}
+          <div className="bg-gray-800/50 backdrop-blur-md rounded-xl p-4 sm:p-6 shadow-lg border border-gray-700 space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-xl font-semibold text-gray-200 flex items-center gap-2">
+                <ListChecks className="w-5 h-5" />
+                Competitors
+              </h2>
+              <Button
+                  onClick={() => setIsAddCompetitorDialogOpen(true)}
+                  className="bg-blue-500/20 text-blue-300 hover:bg-blue-500/30 hover:text-blue-200 transition-colors duration-300"
+              >
+                Add Competitor
+              </Button>
+            </div>
+            <AnimatePresence>
+              {competitors.length > 0 ? (
+                  <ul className="space-y-2">
+                    {competitors.map((competitor) => (
+                        <motion.li
+                            key={competitor.id}
+                            variants={listItemVariants}
+                            initial="hidden"
+                            animate="visible"
+                            exit="exit"
+                            className="flex items-center justify-between bg-gray-700/50 p-2 rounded-md border border-gray-600"
+                        >
+                          <span className="text-gray-200">{competitor.name}</span>
+                          <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleRemoveCompetitor(competitor.id)}
+                              className="text-red-400 hover:text-red-300 -mr-2" // Added negative right margin
+                          >
+                            Remove
+                          </Button>
+                        </motion.li>
                     ))}
-                  </p>
-                  <p className="text-gray-700 font-medium">
-                    Average Rating: {" "}
-                    <span className="text-lg font-bold text-blue-600">
-                      {avgRating}
-                    </span>
-                  </p>
-                </div>
-              </CardHeader>
-              
-              <CardContent className="space-y-6">
-                <div className="space-y-3">
-                  <label htmlFor={`rating-${sauce.id}`} className="block font-medium">
-                    Rate this sauce:
-                  </label>
-                  <Select
-                    value={sauce.newRating}
-                    onValueChange={(value) =>
-                      setSauces((prevSauces) =>
-                        prevSauces.map((s) =>
-                          s.id === sauce.id
-                            ? { ...s, newRating: value, error: "" }
-                            : s
-                        )
-                      )
-                    }
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Select Rating" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {[...Array(10)].map((_, i) => (
-                        <SelectItem key={i + 1} value={(i + 1).toString()}>
-                          {i + 1} {i + 1 === 10 ? "🔥" : ""}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Button 
-                    onClick={() => handleRateSauce(sauce.id)}
-                    className="w-full bg-blue-600 hover:bg-blue-700"
-                  >
-                    Submit Rating
-                  </Button>
-                </div>
+                  </ul>
+              ) : (
+                  <p className="text-gray-400">No competitors added yet.</p>
+              )}
+            </AnimatePresence>
+          </div>
 
-                <div className="space-y-3">
-                  <label htmlFor={`tag-${sauce.id}`} className="block font-medium">
-                    Add a new tag:
-                  </label>
-                  <Input
-                    id={`tag-${sauce.id}`}
-                    placeholder="e.g., Sweet, Tangy, Hot..."
-                    value={sauce.newTag}
-                    onChange={(e) =>
-                      setSauces((prevSauces) =>
-                        prevSauces.map((s) =>
-                          s.id === sauce.id
-                            ? { ...s, newTag: e.target.value, error: "" }
-                            : s
-                        )
-                      )
-                    }
-                    className="w-full"
-                  />
-                  <Button 
-                    onClick={() => handleAddTag(sauce.id)}
-                    variant="secondary"
-                    className="w-full"
+          {/* Score Input Form */}
+          {competitors.length > 0 && (
+              <div className="bg-gray-800/50 backdrop-blur-md rounded-xl p-4 sm:p-6 shadow-lg border border-gray-700 space-y-4">
+                <h2 className="text-xl font-semibold text-gray-200 flex items-center gap-2">
+                  <ListChecks className="w-5 h-5" />
+                  Score Input
+                </h2>
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="competitor-select" className="text-gray-300">
+                      Competitor
+                    </Label>
+                    <Select
+                        onValueChange={(value) => setCurrentCompetitorId(value)}
+                        value={currentCompetitorId}
+                    >
+                      <SelectTrigger className="w-full bg-gray-700/50 text-gray-200 border-gray-600 rounded-md p-2 focus:ring-blue-500">
+                        <SelectValue placeholder="Select Competitor" />
+                      </SelectTrigger>
+                      <SelectContent className="bg-gray-800 border-gray-700 text-gray-200">
+                        {competitors.map((competitor) => (
+                            <SelectItem key={competitor.id} value={competitor.id}>
+                              {competitor.name}
+                            </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {categories.map((category) => (
+                      <div key={category.key} className="space-y-2">
+                        <Label htmlFor={category.key} className="text-gray-300">
+                          {category.name}
+                        </Label>
+                        <Input
+                            id={category.key}
+                            type="number"
+                            min="0"
+                            max="10"
+                            value={currentScores[category.key] || ''}
+                            onChange={(e) =>
+                                handleScoreChange(category.key, parseInt(e.target.value, 10) || 0)
+                            }
+                            className="bg-gray-700/50 text-gray-200 border-gray-600 focus:ring-blue-500"
+                        />
+                      </div>
+                  ))}
+                  <Button
+                      onClick={handleSubmitScore}
+                      className="bg-blue-500/20 text-blue-300 hover:bg-blue-500/30 hover:text-blue-200 transition-colors duration-300"
                   >
-                    Add Tag
+                    Submit Score
                   </Button>
+                  {error && (
+                      <div className="text-red-400 flex items-center gap-1">
+                        <AlertTriangle className="w-4 h-4" />
+                        {error}
+                      </div>
+                  )}
                 </div>
+              </div>
+          )}
 
-                {sauce.error && (
-                  <p className="text-red-500 text-sm mt-2 bg-red-50 p-2 rounded">
-                    {sauce.error}
-                  </p>
-                )}
-              </CardContent>
-            </Card>
-          );
-        })}
+          {/* Leaderboard */}
+          {competitors.length > 0 && (
+              <div className="bg-gray-800/50 backdrop-blur-md rounded-xl p-4 sm:p-6 shadow-lg border border-gray-700">
+                <h2 className="text-xl font-semibold text-gray-200 mb-4 flex items-center gap-2">
+                  <Trophy className="w-5 h-5" />
+                  Leaderboard
+                </h2>
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="text-gray-300">Rank</TableHead>
+                        <TableHead className="text-gray-300">Competitor</TableHead>
+                        {categories.map((category) => (
+                            <TableHead key={category.key} className="text-gray-300">
+                              {category.name}
+                            </TableHead>
+                        ))}
+                        <TableHead className="text-gray-300">Total Score</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {sortedCompetitors.map((competitor, index) => {
+                        const competitorScores = getCompetitorScores(competitor.id)[0] || {
+                          creativity: 0,
+                          technique: 0,
+                          presentation: 0,
+                        };
+                        return (
+                            <TableRow key={competitor.id}>
+                              <TableCell className="font-medium text-gray-200">
+                                {index + 1}
+                              </TableCell>
+                              <TableCell className="font-medium text-gray-200">
+                                {competitor.name}
+                              </TableCell>
+                              <TableCell className="font-medium text-gray-200">
+                                {competitorScores.creativity}
+                              </TableCell>
+                              <TableCell className="font-medium text-gray-200">
+                                {competitorScores.technique}
+                              </TableCell>
+                              <TableCell className="font-medium text-gray-200">
+                                {competitorScores.presentation}
+                              </TableCell>
+                              <TableCell className="font-medium text-gray-200">
+                                {calculateTotalScore(competitor.id)}
+                              </TableCell>
+                            </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+          )}
+
+          {/* Add Competitor Dialog */}
+          <Dialog open={isAddCompetitorDialogOpen} onOpenChange={setIsAddCompetitorDialogOpen}>
+            <AnimatePresence>
+              {isAddCompetitorDialogOpen && (
+                  <DialogContent
+                      as={motion.div}
+                      variants={dialogVariants}
+                      initial="hidden"
+                      animate="visible"
+                      exit="exit"
+                      className="bg-gray-800/90 backdrop-blur-md border-gray-700 text-gray-200"
+                  >
+                    <DialogHeader>
+                      <DialogTitle className="text-gray-200">Add New Competitor</DialogTitle>
+                      <DialogDescription className="text-gray-400">
+                        Enter the name of the competitor.
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="competitor-name" className="text-gray-300">
+                          Competitor Name
+                        </Label>
+                        <Input
+                            id="competitor-name"
+                            value={newCompetitorName}
+                            onChange={(e) => setNewCompetitorName(e.target.value)}
+                            className="bg-gray-700/50 text-gray-200 border-gray-600 focus:ring-blue-500"
+                            placeholder="Competitor Name"
+                        />
+                      </div>
+                      {error && (
+                          <div className="text-red-400 flex items-center gap-1">
+                            <AlertTriangle className="w-4 h-4" />
+                            {error}
+                          </div>
+                      )}
+                    </div>
+                    <DialogFooter>
+                      <Button
+                          type="button"
+                          onClick={() => setIsAddCompetitorDialogOpen(false)}
+                          className="bg-gray-700/50 text-gray-300 hover:bg-gray-700/70"
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                          type="button"
+                          onClick={handleAddCompetitor}
+                          className="bg-blue-500/20 text-blue-300 hover:bg-blue-500/30 hover:text-blue-200 transition-colors duration-300"
+                          disabled={loading}
+                      >
+                        {loading ? (
+                            <>
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              Adding...
+                            </>
+                        ) : (
+                            'Add Competitor'
+                        )}
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+              )}
+            </AnimatePresence>
+          </Dialog>
+        </div>
       </div>
-    </div>
   );
 };
 
