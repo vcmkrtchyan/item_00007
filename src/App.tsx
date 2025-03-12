@@ -48,7 +48,7 @@ const categories: { name: string; key: CategoryKey }[] = [
     { name: 'Presentation', key: 'presentation' },
 ];
 
-// Updated StarRating component with hover effect, solid fill for selected stars, and cursor-pointer
+// StarRating component with hover effect, solid fill for selected stars, and cursor-pointer
 interface StarRatingProps {
     value: number;
     onChange: (value: number) => void;
@@ -58,7 +58,6 @@ const StarRating: React.FC<StarRatingProps> = ({ value, onChange }) => {
     const [hoverValue, setHoverValue] = useState(0);
 
     const handleClick = (starNumber: number) => {
-        // Toggle the selection: clicking the same star resets to 0.
         onChange(starNumber === value ? 0 : starNumber);
     };
 
@@ -74,13 +73,11 @@ const StarRating: React.FC<StarRatingProps> = ({ value, onChange }) => {
         <div className="flex space-x-1">
             {Array.from({ length: 10 }, (_, i) => {
                 const starNumber = i + 1;
-                // Use the hover value if available; otherwise, use the selected value.
                 const isFilled = hoverValue ? starNumber <= hoverValue : starNumber <= value;
-                // Use different color shades for hover vs. selected.
                 const starColor = isFilled
                     ? hoverValue
-                        ? 'text-yellow-400' // hover state color
-                        : 'text-yellow-500' // selected state color
+                        ? 'text-yellow-400'
+                        : 'text-yellow-500'
                     : 'text-gray-400';
                 return (
                     <button
@@ -99,7 +96,6 @@ const StarRating: React.FC<StarRatingProps> = ({ value, onChange }) => {
     );
 };
 
-// Create a motion-enhanced DialogContent component
 const MotionDialogContent = motion(DialogContent);
 
 const App = () => {
@@ -115,16 +111,15 @@ const App = () => {
         presentation: 0,
     });
 
-    // Load data from localStorage on component mount
+    // Load saved data on mount
     useEffect(() => {
         const storedCompetitors = localStorage.getItem('danceBattleCompetitors');
         const storedScores = localStorage.getItem('danceBattleScores');
-
         if (storedCompetitors) setCompetitors(JSON.parse(storedCompetitors));
         if (storedScores) setScores(JSON.parse(storedScores));
     }, []);
 
-    // Save data to localStorage whenever competitors or scores change
+    // Save data when competitors or scores change
     useEffect(() => {
         localStorage.setItem('danceBattleCompetitors', JSON.stringify(competitors));
         localStorage.setItem('danceBattleScores', JSON.stringify(scores));
@@ -139,7 +134,6 @@ const App = () => {
             setError('Competitor name already exists.');
             return;
         }
-
         const newCompetitor: Competitor = {
             id: crypto.randomUUID(),
             name: newCompetitorName.trim(),
@@ -150,7 +144,7 @@ const App = () => {
         setError(null);
     }, [newCompetitorName, competitors]);
 
-    // When deleting a competitor, if it is the only one, reset current scores and selection
+    // If deleting the only competitor, reset the star scores and selection
     const handleRemoveCompetitor = useCallback((competitorId: string) => {
         setCompetitors((prev) => {
             const updatedCompetitors = prev.filter((competitor) => competitor.id !== competitorId);
@@ -163,12 +157,8 @@ const App = () => {
         setScores((prev) => prev.filter((score) => score.competitorId !== competitorId));
     }, []);
 
-    // Update the score value (StarRating handles clamping)
     const handleScoreChange = useCallback((category: string, value: number) => {
-        setCurrentScores((prev) => ({
-            ...prev,
-            [category]: value,
-        }));
+        setCurrentScores((prev) => ({ ...prev, [category]: value }));
     }, []);
 
     const handleSubmitScore = useCallback(() => {
@@ -176,14 +166,12 @@ const App = () => {
             setError('Please select a competitor.');
             return;
         }
-
         const newScore: Score = {
             competitorId: currentCompetitorId,
             creativity: currentScores.creativity,
             technique: currentScores.technique,
             presentation: currentScores.presentation,
         };
-
         setScores((prevScores) => {
             const existingIndex = prevScores.findIndex((score) => score.competitorId === newScore.competitorId);
             if (existingIndex > -1) {
@@ -200,7 +188,6 @@ const App = () => {
                 return [...prevScores, newScore];
             }
         });
-
         setCurrentScores({ creativity: 0, technique: 0, presentation: 0 });
         setCurrentCompetitorId('');
         setError(null);
@@ -212,13 +199,11 @@ const App = () => {
     );
 
     const calculateTotalScore = useCallback(
-        (competitorId: string) => {
-            const competitorScores = getCompetitorScores(competitorId);
-            return competitorScores.reduce(
+        (competitorId: string) =>
+            getCompetitorScores(competitorId).reduce(
                 (total, score) => total + score.creativity + score.technique + score.presentation,
                 0
-            );
-        },
+            ),
         [getCompetitorScores]
     );
 
@@ -406,7 +391,16 @@ const App = () => {
                 )}
 
                 {/* Add Competitor Dialog */}
-                <Dialog open={isAddCompetitorDialogOpen} onOpenChange={setIsAddCompetitorDialogOpen}>
+                <Dialog
+                    open={isAddCompetitorDialogOpen}
+                    onOpenChange={(open) => {
+                        setIsAddCompetitorDialogOpen(open);
+                        if (!open) {
+                            setNewCompetitorName('');
+                            setError(null);
+                        }
+                    }}
+                >
                     <MotionDialogContent
                         variants={dialogVariants}
                         initial="hidden"
