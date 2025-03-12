@@ -19,7 +19,7 @@ import {
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { motion } from 'framer-motion';
-import { AlertTriangle, ListChecks, Trophy } from 'lucide-react';
+import { AlertTriangle, ListChecks, Trophy, Trash, Star } from 'lucide-react';
 import {
     Select,
     SelectContent,
@@ -48,14 +48,64 @@ const categories: { name: string; key: CategoryKey }[] = [
     { name: 'Presentation', key: 'presentation' },
 ];
 
+// Updated StarRating component with hover effect, solid fill for selected stars, and cursor-pointer
+interface StarRatingProps {
+    value: number;
+    onChange: (value: number) => void;
+}
+
+const StarRating: React.FC<StarRatingProps> = ({ value, onChange }) => {
+    const [hoverValue, setHoverValue] = useState(0);
+
+    const handleClick = (starNumber: number) => {
+        // Toggle the selection: clicking the same star resets to 0.
+        onChange(starNumber === value ? 0 : starNumber);
+    };
+
+    const handleMouseEnter = (starNumber: number) => {
+        setHoverValue(starNumber);
+    };
+
+    const handleMouseLeave = () => {
+        setHoverValue(0);
+    };
+
+    return (
+        <div className="flex space-x-1">
+            {Array.from({ length: 10 }, (_, i) => {
+                const starNumber = i + 1;
+                // Use the hover value if available; otherwise, use the selected value.
+                const isFilled = hoverValue ? starNumber <= hoverValue : starNumber <= value;
+                // Use different color shades for hover vs. selected.
+                const starColor = isFilled
+                    ? hoverValue
+                        ? 'text-yellow-400' // hover state color
+                        : 'text-yellow-500' // selected state color
+                    : 'text-gray-400';
+                return (
+                    <button
+                        key={i}
+                        type="button"
+                        onClick={() => handleClick(starNumber)}
+                        onMouseEnter={() => handleMouseEnter(starNumber)}
+                        onMouseLeave={handleMouseLeave}
+                        className="cursor-pointer focus:outline-none"
+                    >
+                        <Star className={`w-6 h-6 ${starColor}`} fill={isFilled ? 'currentColor' : 'none'} />
+                    </button>
+                );
+            })}
+        </div>
+    );
+};
+
 // Create a motion-enhanced DialogContent component
 const MotionDialogContent = motion(DialogContent);
 
 const App = () => {
     const [competitors, setCompetitors] = useState<Competitor[]>([]);
     const [scores, setScores] = useState<Score[]>([]);
-    const [isAddCompetitorDialogOpen, setIsAddCompetitorDialogOpen] =
-        useState(false);
+    const [isAddCompetitorDialogOpen, setIsAddCompetitorDialogOpen] = useState(false);
     const [newCompetitorName, setNewCompetitorName] = useState('');
     const [error, setError] = useState<string | null>(null);
     const [currentCompetitorId, setCurrentCompetitorId] = useState('');
@@ -81,12 +131,11 @@ const App = () => {
     }, [competitors, scores]);
 
     const handleAddCompetitor = useCallback(() => {
-        if (!newCompetitorName.trim()) return;
-        if (
-            competitors.some(
-                (competitor) => competitor.name === newCompetitorName.trim()
-            )
-        ) {
+        if (!newCompetitorName.trim()) {
+            setError('Competitor name cannot be empty.');
+            return;
+        }
+        if (competitors.some((competitor) => competitor.name === newCompetitorName.trim())) {
             setError('Competitor name already exists.');
             return;
         }
@@ -95,30 +144,30 @@ const App = () => {
             id: crypto.randomUUID(),
             name: newCompetitorName.trim(),
         };
-        setCompetitors((prevCompetitors) => [
-            ...prevCompetitors,
-            newCompetitor,
-        ]);
+        setCompetitors((prev) => [...prev, newCompetitor]);
         setNewCompetitorName('');
         setIsAddCompetitorDialogOpen(false);
         setError(null);
     }, [newCompetitorName, competitors]);
 
+    // When deleting a competitor, if it is the only one, reset current scores and selection
     const handleRemoveCompetitor = useCallback((competitorId: string) => {
-        setCompetitors((prevCompetitors) =>
-            prevCompetitors.filter((competitor) => competitor.id !== competitorId)
-        );
-        setScores((prevScores) =>
-            prevScores.filter((score) => score.competitorId !== competitorId)
-        );
+        setCompetitors((prev) => {
+            const updatedCompetitors = prev.filter((competitor) => competitor.id !== competitorId);
+            if (updatedCompetitors.length === 0) {
+                setCurrentScores({ creativity: 0, technique: 0, presentation: 0 });
+                setCurrentCompetitorId('');
+            }
+            return updatedCompetitors;
+        });
+        setScores((prev) => prev.filter((score) => score.competitorId !== competitorId));
     }, []);
 
-    // Clamp the input value between 0 and 10
+    // Update the score value (StarRating handles clamping)
     const handleScoreChange = useCallback((category: string, value: number) => {
-        const clampedValue = Math.max(0, Math.min(10, value));
-        setCurrentScores((prevScores) => ({
-            ...prevScores,
-            [category]: clampedValue,
+        setCurrentScores((prev) => ({
+            ...prev,
+            [category]: value,
         }));
     }, []);
 
@@ -136,22 +185,16 @@ const App = () => {
         };
 
         setScores((prevScores) => {
-            const existingScoreIndex = prevScores.findIndex(
-                (score) => score.competitorId === newScore.competitorId
-            );
-
-            if (existingScoreIndex > -1) {
-                // Add new score values to the existing score
+            const existingIndex = prevScores.findIndex((score) => score.competitorId === newScore.competitorId);
+            if (existingIndex > -1) {
                 const updatedScores = [...prevScores];
-                const existingScore = updatedScores[existingScoreIndex];
-                const combinedScore: Score = {
+                const existingScore = updatedScores[existingIndex];
+                updatedScores[existingIndex] = {
                     competitorId: newScore.competitorId,
                     creativity: existingScore.creativity + newScore.creativity,
                     technique: existingScore.technique + newScore.technique,
-                    presentation:
-                        existingScore.presentation + newScore.presentation,
+                    presentation: existingScore.presentation + newScore.presentation,
                 };
-                updatedScores[existingScoreIndex] = combinedScore;
                 return updatedScores;
             } else {
                 return [...prevScores, newScore];
@@ -164,30 +207,23 @@ const App = () => {
     }, [currentCompetitorId, currentScores]);
 
     const getCompetitorScores = useCallback(
-        (competitorId: string) => {
-            return scores.filter((score) => score.competitorId === competitorId);
-        },
+        (competitorId: string) => scores.filter((score) => score.competitorId === competitorId),
         [scores]
     );
 
     const calculateTotalScore = useCallback(
         (competitorId: string) => {
             const competitorScores = getCompetitorScores(competitorId);
-            let total = 0;
-            competitorScores.forEach((score) => {
-                total += score.creativity + score.technique + score.presentation;
-            });
-            return total;
+            return competitorScores.reduce(
+                (total, score) => total + score.creativity + score.technique + score.presentation,
+                0
+            );
         },
         [getCompetitorScores]
     );
 
     const sortedCompetitors = React.useMemo(() => {
-        return [...competitors].sort((a, b) => {
-            const scoreA = calculateTotalScore(a.id);
-            const scoreB = calculateTotalScore(b.id);
-            return scoreB - scoreA;
-        });
+        return [...competitors].sort((a, b) => calculateTotalScore(b.id) - calculateTotalScore(a.id));
     }, [competitors, calculateTotalScore]);
 
     const dialogVariants = {
@@ -215,7 +251,7 @@ const App = () => {
                 </div>
 
                 {/* Competitors Section */}
-                <div className="bg-gray-800/50 backdrop-blur-md rounded-xl p-4 sm:p-6 shadow-lg border border-gray-700 space-y-4">
+                <div className="bg-gray-800/50 backdrop-blur-md rounded-xl px-4 py-4 sm:px-4 sm:py-6 shadow-lg border border-gray-700 space-y-4">
                     <div className="flex items-center justify-between">
                         <h2 className="text-xl font-semibold text-gray-200 flex items-center gap-2">
                             <ListChecks className="w-5 h-5" />
@@ -223,7 +259,7 @@ const App = () => {
                         </h2>
                         <Button
                             onClick={() => setIsAddCompetitorDialogOpen(true)}
-                            className="bg-blue-500/20 text-blue-300 hover:bg-blue-500/30 hover:text-blue-200 transition-colors duration-300"
+                            className="cursor-pointer bg-[#2B7FFF] hover:bg-[#004BB6] text-white transition-colors duration-300"
                         >
                             Add Competitor
                         </Button>
@@ -244,9 +280,9 @@ const App = () => {
                                         variant="ghost"
                                         size="icon"
                                         onClick={() => handleRemoveCompetitor(competitor.id)}
-                                        className="text-red-400 hover:text-red-300 ml-2"
+                                        className="cursor-pointer text-red-400 hover:text-red-300 ml-2"
                                     >
-                                        Remove
+                                        <Trash className="w-4 h-4" />
                                     </Button>
                                 </motion.li>
                             ))}
@@ -272,12 +308,16 @@ const App = () => {
                                     onValueChange={(value) => setCurrentCompetitorId(value)}
                                     value={currentCompetitorId}
                                 >
-                                    <SelectTrigger className="w-full bg-gray-700/50 text-gray-200 border-gray-600 rounded-md p-2 focus:ring-blue-500">
+                                    <SelectTrigger className="cursor-pointer w-full bg-gray-700/50 text-gray-200 border-gray-600 rounded-md p-2 focus:ring-blue-500">
                                         <SelectValue placeholder="Select Competitor" />
                                     </SelectTrigger>
                                     <SelectContent className="bg-gray-800 border-gray-700 text-gray-200">
                                         {competitors.map((competitor) => (
-                                            <SelectItem key={competitor.id} value={competitor.id}>
+                                            <SelectItem
+                                                key={competitor.id}
+                                                value={competitor.id}
+                                                className="cursor-pointer"
+                                            >
                                                 {competitor.name}
                                             </SelectItem>
                                         ))}
@@ -289,25 +329,15 @@ const App = () => {
                                     <Label htmlFor={category.key} className="text-gray-300">
                                         {category.name}
                                     </Label>
-                                    <Input
-                                        id={category.key}
-                                        type="number"
-                                        min="0"
-                                        max="10"
-                                        value={currentScores[category.key] || ''}
-                                        onChange={(e) =>
-                                            handleScoreChange(
-                                                category.key,
-                                                parseInt(e.target.value, 10) || 0
-                                            )
-                                        }
-                                        className="bg-gray-700/50 text-gray-200 border-gray-600 focus:ring-blue-500"
+                                    <StarRating
+                                        value={currentScores[category.key]}
+                                        onChange={(newValue) => handleScoreChange(category.key, newValue)}
                                     />
                                 </div>
                             ))}
                             <Button
                                 onClick={handleSubmitScore}
-                                className="bg-blue-500/20 text-blue-300 hover:bg-blue-500/30 hover:text-blue-200 transition-colors duration-300"
+                                className="cursor-pointer bg-[#2B7FFF] hover:bg-[#004BB6] text-white transition-colors duration-300"
                             >
                                 Submit Score
                             </Button>
@@ -339,15 +369,11 @@ const App = () => {
                                                 {category.name}
                                             </TableHead>
                                         ))}
-                                        <TableHead className="text-gray-300">
-                                            Total Score
-                                        </TableHead>
+                                        <TableHead className="text-gray-300">Total Score</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
                                     {sortedCompetitors.map((competitor, index) => {
-                                        // Since we now accumulate scores into one record per competitor,
-                                        // we can safely use the first (and only) record.
                                         const competitorScores =
                                             getCompetitorScores(competitor.id)[0] || {
                                                 creativity: 0,
@@ -356,12 +382,8 @@ const App = () => {
                                             };
                                         return (
                                             <TableRow key={competitor.id}>
-                                                <TableCell className="font-medium text-gray-200">
-                                                    {index + 1}
-                                                </TableCell>
-                                                <TableCell className="font-medium text-gray-200">
-                                                    {competitor.name}
-                                                </TableCell>
+                                                <TableCell className="font-medium text-gray-200">{index + 1}</TableCell>
+                                                <TableCell className="font-medium text-gray-200">{competitor.name}</TableCell>
                                                 <TableCell className="font-medium text-gray-200">
                                                     {competitorScores.creativity}
                                                 </TableCell>
@@ -384,10 +406,7 @@ const App = () => {
                 )}
 
                 {/* Add Competitor Dialog */}
-                <Dialog
-                    open={isAddCompetitorDialogOpen}
-                    onOpenChange={setIsAddCompetitorDialogOpen}
-                >
+                <Dialog open={isAddCompetitorDialogOpen} onOpenChange={setIsAddCompetitorDialogOpen}>
                     <MotionDialogContent
                         variants={dialogVariants}
                         initial="hidden"
@@ -396,9 +415,7 @@ const App = () => {
                         className="bg-gray-800/90 backdrop-blur-md border-gray-700 text-gray-200"
                     >
                         <DialogHeader>
-                            <DialogTitle className="text-gray-200">
-                                Add New Competitor
-                            </DialogTitle>
+                            <DialogTitle className="text-gray-200">Add New Competitor</DialogTitle>
                             <DialogDescription className="text-gray-400">
                                 Enter the name of the competitor.
                             </DialogDescription>
@@ -428,14 +445,14 @@ const App = () => {
                             <Button
                                 type="button"
                                 onClick={() => setIsAddCompetitorDialogOpen(false)}
-                                className="bg-gray-700/50 text-gray-300 hover:bg-gray-700/70"
+                                className="cursor-pointer bg-gray-700/50 text-gray-300 hover:bg-gray-700/70"
                             >
                                 Cancel
                             </Button>
                             <Button
                                 type="button"
                                 onClick={handleAddCompetitor}
-                                className="bg-blue-500/20 text-blue-300 hover:bg-blue-500/30 hover:text-blue-200 transition-colors duration-300"
+                                className="cursor-pointer bg-[#2B7FFF] hover:bg-[#004BB6] text-white transition-colors duration-300"
                             >
                                 Add Competitor
                             </Button>
